@@ -88,22 +88,29 @@ class PostgresLoadfileWriter {
                 try {
                     int currentRecordId = currentRow.getInt(1)
 
-
-                    if (collection == 'bib' && (previousBibResultSet.bib_id == -1)) {
+                    if (collection == 'bib' && (previousRecordId == -1)) {
                         println "1"
                         //Första varvet
-                        previousBibResultSet = [bib_id: currentRow.bib_id, data: currentRow.data, create_date: currentRow.create_date, auth_id: currentRow.auth_id]
-                        //TODO: make closure out of this
+                        previousBibResultSet = [
+                                bib_id     : currentRow.getInt('bib_id'),
+                                databytes  : currentRow.getBytes('data'),
+                                create_date: currentRow.getTimestamp('create_date'),
+                                auth_id    : currentRow.getInt('auth_id')]
+//TODO: make closure out of this
                         previousRecordId = currentRecordId
                     } else if (collection == 'bib' && previousBibResultSet.bib_id == currentRecordId) {
-                        print "."
                         //Flera poster med samma ID
+                        print ". "
                         previousSpecs.addAll(getOaipmhSetSpecs(previousBibResultSet, collection))
 
-                        previousBibResultSet = [bib_id: currentRow.bib_id, data: currentRow.data, create_date: currentRow.create_date, auth_id: currentRow.auth_id]
+                        previousBibResultSet = [
+                                bib_id     : currentRow.getInt('bib_id'),
+                                databytes  : currentRow.getBytes('data'),
+                                create_date: currentRow.getTimestamp('create_date'),
+                                auth_id    : currentRow.getInt('auth_id')]
                     } else {
                         //Poster med olika id. Antingen sista av flera eller en ny post
-                        print "|"
+                        print "| "
                         previousSpecs.addAll(getOaipmhSetSpecs(previousBibResultSet, collection))
 
                         //handleRow(previousRow,collection)
@@ -112,17 +119,19 @@ class PostgresLoadfileWriter {
                         def authposts = previousSpecs.findAll { String it ->
                             it.startsWith("auth")
                         }.count { it }
-                        if (authposts > 1)
-                            print "${authposts}"
-                        previousBibResultSet = [bib_id: currentRow.bib_id, data: currentRow.data, create_date: currentRow.create_date, auth_id: currentRow.auth_id]
-                        previousSpecs = getOaipmhSetSpecs(currentRow, collection)
+                        previousBibResultSet = [
+                                bib_id     : currentRow.getInt('bib_id'),
+                                databytes  : currentRow.getBytes("data"),
+                                create_date: currentRow.getTimestamp("create_date"),
+                                auth_id    : currentRow.getInt('auth_id')]
+                        previousSpecs = []
                     }
 
                     //TODO: what about other collections!
 
                 } catch (any) {
-                    println all.message
-                    println all.stackTrace
+                    println any.message
+                    println any.stackTrace
                 }
 
             }
@@ -131,8 +140,8 @@ class PostgresLoadfileWriter {
             handleRow(previousBibResultSet, collection)
 
         }
-        catch (all) {
-            println all.message
+        catch (any) {
+            println any.message
         }
         finally {
             s_mainTableWriter.close()
@@ -167,7 +176,7 @@ class PostgresLoadfileWriter {
     static List getOaipmhSetSpecs(def resultSet, String collection) {
         List specs = []
         if (collection == "bib") {
-            int authId = resultSet.auth_id
+            int authId = resultSet.auth_id ?:0
             if (authId > 0)
                 specs.add("authority:" + authId + "DEBUG: ${resultSet.bib_id}")
 
