@@ -9,7 +9,6 @@ import whelk.Document
 import whelk.converter.MarcJSONConverter
 import whelk.converter.marc.MarcFrameConverter
 import whelk.importer.MySQLLoader
-import whelk.util.LegacyIntegrationTools
 
 import java.nio.charset.Charset
 import java.nio.file.Files
@@ -31,7 +30,6 @@ class PostgresLoadfileWriter {
     // USED FOR DEV ONLY, MUST _NEVER_ BE SET TO TRUE ONCE XL GOES INTO PRODUCTION. WITH THIS SETTING THE IMPORT WILL
     // _SKIP_ DOCUMENTS THAT FAIL CONVERSION, RESULTING IN POTENTIAL DATA LOSS IF USED WHEN IMPORTING TO A PRODUCTION XL
     private static final boolean FAULT_TOLERANT_MODE = false;
-
     private static MarcFrameConverter s_marcFrameConverter;
     private static BufferedWriter s_mainTableWriter;
     private static BufferedWriter s_identifiersWriter;
@@ -52,8 +50,10 @@ class PostgresLoadfileWriter {
         });
     }
 
-    public
+
     static void dumpGpars(String exportFileName, String collection, String connectionUrl) {
+        Map specGroupsResult = [SolidMatches: 0, MisMatchesOnA: 0, bibInAukt: 0, auktInBib: 0,doubleDiff:0, possibleMatches:0]
+
         if (FAULT_TOLERANT_MODE)
             System.out.println("\t**** RUNNING IN FAULT TOLERANT MODE, DOCUMENTS THAT FAIL CONVERSION WILL BE SKIPPED.\n" +
                     "\tIF YOU ARE IMPORTING TO A PRODUCTION XL, ABORT NOW!! AND RECOMPILE WITH FAULT_TOLERANT_MODE=false");
@@ -87,7 +87,7 @@ class PostgresLoadfileWriter {
                         if (elapsedSecs > 0) {
                             def docsPerSec = counter / elapsedSecs
                             println "Working. Currently ${counter} documents saved. Crunching ${docsPerSec} docs / s"
-                            println "Matches: ${successfulMatches}/${totallMatches}"
+                            println "Possible matches: ${specGroupsResult.possibleMatches}\tSolid matches: ${specGroupsResult.SolidMatches} \tMisMatchesOnA: ${specGroupsResult.MisMatchesOnA} \tbibInAukt: ${specGroupsResult.bibInAukt} \t auktInBib:${specGroupsResult.auktInBib} \tdoublediff: ${specGroupsResult.doubleDiff}"
                         }
                     }
 
@@ -127,7 +127,14 @@ class PostgresLoadfileWriter {
                                 default:
                                     //print "| "
                                     // task {
-                                    handleRow(previousBibResultSet, collection, previousAuthData)
+                                    def m = handleRow(previousBibResultSet, collection, previousAuthData)
+                                    specGroupsResult.SolidMatches += m.SolidMatches
+                                    specGroupsResult.MisMatchesOnA += m.MisMatchesOnA
+                                    specGroupsResult.bibInAukt += m.bibInAukt
+                                    specGroupsResult.auktInBib += m.auktInBib
+                                    specGroupsResult.doubleDiff += m.doubleDiff
+                                    specGroupsResult.possibleMatches +=m.possibleMatches
+
                                     //}
                                     previousBibResultSet = rowMap
                                     previousAuthData = []
@@ -137,8 +144,8 @@ class PostgresLoadfileWriter {
                     }
                 }
                 catch (any) {
-                    print any.message
-                    //print any.stackTrace
+                    println any.message
+                    print any.stackTrace
                     //throw any
                 }
             }
@@ -162,7 +169,6 @@ class PostgresLoadfileWriter {
         println "Done. Processed  ${counter} documents in ${endSecs} seconds."
 
     }
-
 
 
     static Map composeAuthData(LinkedHashMap<String, Object> map) {
@@ -252,29 +258,41 @@ class PostgresLoadfileWriter {
     }
 
     private
-    static void handleRow(Map rowMap, String collection, List setSpecs) {
-
+    static Map handleRow(Map rowMap, String collection, List setSpecs) {
+        Map specGroupsResult = [SolidMatches: 0, MisMatchesOnA: 0, bibInAukt: 0, auktInBib: 0, doubleDiff:0, possibleMatches:0]
         Map doc = getMarcDocMap(rowMap.data as byte[])
 
         if (doc) {
 
             if (collection == 'bib' && setSpecs.count { it } > 0) {
-                SetSpecMatcher.matchAuthToBib(doc, setSpecs)
+                def matchResult = SetSpecMatcher.matchAuthToBib(doc, setSpecs)
+                if (matchResult) {
+                    specGroupsResult.SolidMatches += matchResult.SolidMatches
+                    specGroupsResult.MisMatchesOnA += matchResult.MisMatchesOnA
+                    specGroupsResult.bibInAukt += matchResult.bibInAukt
+                    specGroupsResult.auktInBib += matchResult.auktInBib
+                    specGroupsResult.doubleDiff += matchResult.doubleDiff
+                    specGroupsResult.possibleMatches += matchResult.possibleMatches
+                }
+                else{
+                    println "no matchresult. Why?"
+                }
             }
 
-           /* if (!isSuppressed(doc)) {
-                String oldStyleIdentifier = "/" + collection + "/" + getControlNumber(doc)
-                def id = LegacyIntegrationTools.generateId(oldStyleIdentifier)
-                Map convertedData = setSpecs && setSpecs.size() > 1 && collection != 'bib' ?
-                        s_marcFrameConverter.convert(doc, id, [oaipmhSetSpecs: setSpecs]) :
-                        s_marcFrameConverter.convert(doc, id)
-                Document document = new Document(convertedData)
-                document.created = rowMap.created
-                writeDocumentToLoadFile(document, collection)
-            }*/
+            //TODO: enable the below code once the auth-bib matching is finished
+            /* if (!isSuppressed(doc)) {
+                 String oldStyleIdentifier = "/" + collection + "/" + getControlNumber(doc)
+                 def id = LegacyIntegrationTools.generateId(oldStyleIdentifier)
+                 Map convertedData = setSpecs && setSpecs.size() > 1 && collection != 'bib' ?
+                         s_marcFrameConverter.convert(doc, id, [oaipmhSetSpecs: setSpecs]) :
+                         s_marcFrameConverter.convert(doc, id)
+                 Document document = new Document(convertedData)
+                 document.created = rowMap.created
+                 writeDocumentToLoadFile(document, collection)
+             }*/
         }
+        return specGroupsResult
     }
-
 
 
     static List getHoldOaipmhSetSpecs(def resultSet) {
