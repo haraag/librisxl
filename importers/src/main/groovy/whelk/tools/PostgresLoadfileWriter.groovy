@@ -16,8 +16,8 @@ import java.nio.file.Paths
 import java.sql.ResultSet
 import java.sql.Statement
 
-//import static groovyx.gpars.dataflow.Dataflow.task
-//import static groovyx.gpars.GParsPool.withPool
+import static groovyx.gpars.dataflow.Dataflow.task
+import static groovyx.gpars.GParsPool.withPool
 /**
  * Writes documents into a PostgreSQL load-file, which can be efficiently imported into lddb
  */
@@ -52,7 +52,7 @@ class PostgresLoadfileWriter {
 
 
     static void dumpGpars(String exportFileName, String collection, String connectionUrl) {
-        Map specGroupsResult = [SolidMatches: 0, MisMatchesOnA: 0, bibInAukt: 0, auktInBib: 0,doubleDiff:0, possibleMatches:0]
+        Map specGroupsResult = [SolidMatches: 0, MisMatchesOnA: 0, MisMatchesOnB:0, bibInAukt: 0, auktInBib: 0,doubleDiff:0, possibleMatches:0]
 
         if (FAULT_TOLERANT_MODE)
             System.out.println("\t**** RUNNING IN FAULT TOLERANT MODE, DOCUMENTS THAT FAIL CONVERSION WILL BE SKIPPED.\n" +
@@ -65,7 +65,7 @@ class PostgresLoadfileWriter {
         def successfulMatches = 0
         def totallMatches
         def startTime = System.currentTimeMillis()
-        //withPool {
+        withPool {
         try {
             def sql = Sql.newInstance(connectionUrl, "com.mysql.jdbc.Driver")
             sql.withStatement { Statement stmt -> stmt.fetchSize = Integer.MIN_VALUE }
@@ -87,7 +87,7 @@ class PostgresLoadfileWriter {
                         if (elapsedSecs > 0) {
                             def docsPerSec = counter / elapsedSecs
                             println "Working. Currently ${counter} documents saved. Crunching ${docsPerSec} docs / s"
-                            println "Possible matches: ${specGroupsResult.possibleMatches}\tSolid matches: ${specGroupsResult.SolidMatches} \tMisMatchesOnA: ${specGroupsResult.MisMatchesOnA} \tbibInAukt: ${specGroupsResult.bibInAukt} \t auktInBib:${specGroupsResult.auktInBib} \tdoublediff: ${specGroupsResult.doubleDiff}"
+                            println "Possible matches: ${specGroupsResult.possibleMatches}\tSolid matches: ${specGroupsResult.SolidMatches} \tMisMatchesOnA: ${specGroupsResult.MisMatchesOnA}\tMisMatchesOnB: ${specGroupsResult.MisMatchesOnB} \tbibInAukt: ${specGroupsResult.bibInAukt} \t auktInBib:${specGroupsResult.auktInBib} \tdoublediff: ${specGroupsResult.doubleDiff}"
                         }
                     }
 
@@ -126,16 +126,17 @@ class PostgresLoadfileWriter {
                             //New record
                                 default:
                                     //print "| "
-                                    // task {
+                                    task {
                                     def m = handleRow(previousBibResultSet, collection, previousAuthData)
                                     specGroupsResult.SolidMatches += m.SolidMatches
                                     specGroupsResult.MisMatchesOnA += m.MisMatchesOnA
+                                    specGroupsResult.MisMatchesOnB += m.MisMatchesOnB
                                     specGroupsResult.bibInAukt += m.bibInAukt
                                     specGroupsResult.auktInBib += m.auktInBib
                                     specGroupsResult.doubleDiff += m.doubleDiff
                                     specGroupsResult.possibleMatches +=m.possibleMatches
 
-                                    //}
+                                    }
                                     previousBibResultSet = rowMap
                                     previousAuthData = []
                                     previousAuthData.add(currentAuthData)
@@ -163,7 +164,7 @@ class PostgresLoadfileWriter {
             s_mainTableWriter.close()
             s_identifiersWriter.close()
         }
-        //}
+        }
 
         def endSecs = (System.currentTimeMillis() - startTime) / 1000
         println "Done. Processed  ${counter} documents in ${endSecs} seconds."
@@ -269,6 +270,7 @@ class PostgresLoadfileWriter {
                 if (matchResult) {
                     specGroupsResult.SolidMatches += matchResult.SolidMatches
                     specGroupsResult.MisMatchesOnA += matchResult.MisMatchesOnA
+                    specGroupsResult.MisMatchesOnB += matchResult.MisMatchesOnB
                     specGroupsResult.bibInAukt += matchResult.bibInAukt
                     specGroupsResult.auktInBib += matchResult.auktInBib
                     specGroupsResult.doubleDiff += matchResult.doubleDiff

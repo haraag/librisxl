@@ -74,15 +74,15 @@ class SetSpecMatcher {
                 }
             }
 
-            Map specGroupsResult = [SolidMatches:0, MisMatchesOnA:0,bibInAukt:0,auktInBib:0,doubleDiff:0, possibleMatches:0]
+            Map specGroupsResult = [SolidMatches:0, MisMatchesOnA:0,MisMatchesOnB:0,bibInAukt:0,auktInBib:0,doubleDiff:0, possibleMatches:0]
 
             specGroups.each { specGroup ->
                 def bibFieldGroup = bibFieldGroups.find {
                     it.key == specGroup.key
                 }
                 if (!bibFieldGroup?.value) {
-                    def file = new File("/Users/Theodor/libris/missingbibfields.txt")
-                    file <<"Specgroup: ${specGroup?.key}, AuthFields: ${specGroups.collect { it.key }} Bibfields:${bibFieldGroups.collect { it }} BIBId: ${setSpecs.first()?.bibid} AUTHId: ${setSpecs.first()?.id}\n"
+                    def file = new File("/Users/Theodor/libris/missingbibfields.tsv")
+                    file << "${specGroup?.key} \t${setSpecs.first()?.bibid} \t${setSpecs.first()?.id} \t  http://libris.kb.se/bib/${setSpecs.first()?.bibid}?vw=full&tab3=marcBIBId: } \t http://libris.kb.se/auth/${setSpecs.first()?.id}\n"
                 }
                 else {
                     //println "Specgroup: ${specGroup?.key}, AuthFields: ${specGroups.count { it.value }} against  ${bibFieldGroup?.key}, Bibfields: ${bibFieldGroup?.value.count { it }} "
@@ -96,31 +96,29 @@ class SetSpecMatcher {
                         def completeMatches = diffs.findAll { match ->
                             match.diff.count { it } == 0 &&
                                     match.reversediff.count { it } == 0
-
                         }
 
                         def misMatchesOnA = diffs.findAll { match ->
-                            match.reversediff.find { it -> it.a } != null
+                            match.reversediff.find { it -> it.a } != null && match.diff.find { it -> it.a } != null
+                        }
+
+                        def misMatchesOnB = diffs.findAll { match ->
+                            match.reversediff.find { it -> it.b } != null && match.diff.find { it -> it.b } != null
                         }
 
 
                         def uncertainMatches = diffs.findAll { match ->
+                            (match.diff.count { it } > 0 || match.reversediff.count { it } > 0) &&
+                                    match.overlap.count{it} > 0 &&
+                            (match.reversediff.find { it -> it.a } == null && match.diff.find { it -> it.a } == null) &&
+                                    (match.reversediff.find { it -> it.b } == null && match.diff.find { it -> it.b } == null)
 
-                            match.reversediff.find { it -> it.a } == null &&
-                                    (match.diff.count { it } > 0 ||
-                                            match.reversediff.count { it } > 0)
                         }
 
-
-                        /*if(bibFieldGroup.value.count { it } == completeMatches.count { it } + misMatchesOnA.count { it } )
-                            println "All match"
-                        if(uncertainMatches.count{it} >0)
-                        {
-                            println "\t${spec.field} \t${bibFieldGroup.value.count { it }} \t ${diffs.count { it }}\t ${completeMatches.count { it }} \t${misMatchesOnA.count { it }}"
-                        }*/
                         specGroupsResult.possibleMatches +=1
                         specGroupsResult.SolidMatches += completeMatches.count{it}
                         specGroupsResult.MisMatchesOnA +=misMatchesOnA.count{it}
+                        specGroupsResult.MisMatchesOnB +=misMatchesOnB.count{it}
                         specGroupsResult.bibInAukt += uncertainMatches.count { match ->
                             match.diff.count { it } > 0 && match.reversediff.count { it } == 0
                         }
@@ -132,6 +130,79 @@ class SetSpecMatcher {
                             match.reversediff.count { it } > 0 &&
                                     match.diff.count { it } > 0
                         }
+
+                        uncertainMatches.each { match ->
+                            def file = new File("/Users/Theodor/libris/uncertainmatches.tsv")
+
+                            def type = ""
+                            switch (match) {
+                                case {it.reversediff.count { i->i } > 0 && it.diff.count { i->i } > 0 }:
+                                    type = 'doubleDiff'
+                                    break
+                                case  {it.reversediff.count { i->i } > 0 && it.diff.count { i->i } == 0}:
+                                    type = 'inverseDiff'
+                                    break
+                                case {it.diff.count { i->i } > 0 && it.reversediff.count { i->i } == 0}:
+                                    type = 'diff'
+                                    break
+                            }
+
+                            boolean partialD = false
+                            boolean bibHas035a = false
+                            try{
+                                if(doc.fields?.'035'?.subfields?.a != null) {
+                                    bibHas035a = doc.fields.'035'.subfields.a.first().any()
+                                }
+                            }
+                            catch(any){
+                                println any.message
+                            }
+
+                            try {
+                                def bibD = match.reversediff.collect { it -> it.d }
+                                def auktD = match.diff.collect { it -> it.d }
+
+                                partialD = (match.spec.field == '100' && bibD.any() && auktD.any() && bibD.first() != '' && auktD.first() != '') ? (bibD.first()?.substring(0, 4) == auktD.first()?.substring(0, 4)) : false
+                            }
+                            catch(any)
+                            {
+                                println any.message
+                            }
+
+                            file << "${type}" +
+                                    "\t${match.diff.count{it}}" +
+                                    "\t${match.spec.field}" +
+                                    "\t${match.bibfield}" +
+                                    "\t${match.subfieldsInOverlap}" +
+                                    "\t${match.subfieldsIndiff}" +
+                                    "\t${match.subfieldsInreversediff}" +
+                                    "\t${match.reversediff.count{it}}" +
+                                    "\t${match.overlap.count { it }}" +
+                                    "\t${doc.leader?.substring(5,6)?:''}" +
+                                    "\t${doc.leader?.substring(6,7)?:''}" +
+                                    "\t${doc.leader?.substring(7,8)?:''}" +
+                                    "\t${doc.leader?.substring(17,18)?:''}" +
+                                    "\t${doc.fields?."008"?.find{it->it}?.take(2)?:''}" +
+                                    "\t _" +
+                                    "\t${doc.fields?."040"?.find{it->it}?.subfields?."a"?.find{it->it}?:''}" +
+                                    "\t${doc.fields?."040"?.find{it->it}?.subfields?."d"?.find{it->it}?:''}" +
+                                    "\t${match.spec.data.leader?.substring(5,6)?:''}" +
+                                    "\t${match.spec.data.leader?.substring(6,7)?:''}" +
+                                    "\t${match.spec.data.fields?."008"?.find{it->it}?.take(2)?:''}" +
+                                    "\t${match.spec.data.fields?."008"?.find{it->it}?.substring(9,10)?:''}" +
+                                    "\t${match.spec.data.fields?."008"?.find{it->it}?.substring(33,34)?:''}" +
+                                    "\t${match.spec.data.fields?."008"?.find{it->it}?.substring(39,40)?:''}" +
+                                    "\t${match.numBibfields}" +
+                                    "\t${match.numAuthFields}" +
+                                    "\t${partialD}" +
+                                    "\t${bibHas035a}" +
+                                    "\t${match.bibset} " +
+                                    "\t${match.auktset} " +
+                                    "\n"
+
+                        }
+
+
                     }
                 }
             }
@@ -143,7 +214,7 @@ class SetSpecMatcher {
     private
     static List<Map> getSetDiffs(setSpec, bibFieldGroup, Map fieldRules) {
         bibFieldGroup.collect { field ->
-            Map returnMap = [diff: null, reversediff: null, bibfield: field, spec: setSpec, errorMessage: ""]
+            Map returnMap = [diff: null, reversediff: null, bibfield: field.keySet().first(), spec: setSpec, errorMessage: "", overlap:0, numBibfields:0, numAuthFields:0]
 
             def rule = fieldRules[setSpec.field]
             if (!rule) {
@@ -151,11 +222,20 @@ class SetSpecMatcher {
                 return returnMap
 
             } else {
-                def sf = normaliseSubfields(field[field.keySet()[0]].subfields).findAll {
+                def bibSubFields = normaliseSubfields(field[field.keySet()[0]].subfields).findAll {
                     !rule.subFieldsToIgnore.bib.contains(it.keySet()[0])
                 }
-                returnMap.diff = sf.toSet() - setSpec.normalizedSubfields.toSet()
-                returnMap.reversediff = setSpec.normalizedSubfields.toSet() - sf.toSet()
+                returnMap.bibset = bibSubFields.toSet()
+                returnMap.auktset = setSpec.normalizedSubfields.toSet()
+                returnMap.diff = returnMap.auktset - returnMap.bibset
+                returnMap.numBibfields = returnMap.bibset.count{it}
+                returnMap.numAuthFields =  returnMap.auktset.count{it}
+                returnMap.reversediff = returnMap.bibset -  returnMap.auktset
+                returnMap.overlap =  returnMap.bibset.intersect(returnMap.auktset)
+
+                returnMap.subfieldsInOverlap =  returnMap.overlap.collect{it->it.keySet().first()}.toSorted().join()
+                returnMap.subfieldsIndiff =  returnMap.diff.collect{it->it.keySet().first()}.toSorted().join()
+                returnMap.subfieldsInreversediff =  returnMap.reversediff.collect{it->it.keySet().first()}.toSorted().join()
                 //TODO: print stuff to file instead
                 return returnMap
             }
