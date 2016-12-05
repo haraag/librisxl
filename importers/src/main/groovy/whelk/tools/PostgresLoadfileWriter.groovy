@@ -16,8 +16,8 @@ import java.nio.file.Paths
 import java.sql.ResultSet
 import java.sql.Statement
 
-import static groovyx.gpars.dataflow.Dataflow.task
-import static groovyx.gpars.GParsPool.withPool
+//import static groovyx.gpars.dataflow.Dataflow.task
+//import static groovyx.gpars.GParsPool.withPool
 /**
  * Writes documents into a PostgreSQL load-file, which can be efficiently imported into lddb
  */
@@ -65,7 +65,7 @@ class PostgresLoadfileWriter {
         def successfulMatches = 0
         def totallMatches
         def startTime = System.currentTimeMillis()
-        withPool {
+        //withPool {
         try {
             def sql = Sql.newInstance(connectionUrl, "com.mysql.jdbc.Driver")
             sql.withStatement { Statement stmt -> stmt.fetchSize = Integer.MIN_VALUE }
@@ -126,7 +126,7 @@ class PostgresLoadfileWriter {
                             //New record
                                 default:
                                     //print "| "
-                                    task {
+                                    //task {
                                     def m = handleRow(previousBibResultSet, collection, previousAuthData)
                                     specGroupsResult.SolidMatches += m.SolidMatches
                                     specGroupsResult.MisMatchesOnA += m.MisMatchesOnA
@@ -136,7 +136,7 @@ class PostgresLoadfileWriter {
                                     specGroupsResult.doubleDiff += m.doubleDiff
                                     specGroupsResult.possibleMatches +=m.possibleMatches
 
-                                    }
+                                   // }
                                     previousBibResultSet = rowMap
                                     previousAuthData = []
                                     previousAuthData.add(currentAuthData)
@@ -164,7 +164,7 @@ class PostgresLoadfileWriter {
             s_mainTableWriter.close()
             s_identifiersWriter.close()
         }
-        }
+        //}
 
         def endSecs = (System.currentTimeMillis() - startTime) / 1000
         println "Done. Processed  ${counter} documents in ${endSecs} seconds."
@@ -260,7 +260,7 @@ class PostgresLoadfileWriter {
 
     private
     static Map handleRow(Map rowMap, String collection, List setSpecs) {
-        Map specGroupsResult = [SolidMatches: 0, MisMatchesOnA: 0, bibInAukt: 0, auktInBib: 0, doubleDiff:0, possibleMatches:0]
+        Map specGroupsResult = [SolidMatches: 0, MisMatchesOnA: 0,MisMatchesOnB: 0, bibInAukt: 0, auktInBib: 0, doubleDiff:0, possibleMatches:0]
         Map doc = getMarcDocMap(rowMap.data as byte[])
 
         if (doc) {

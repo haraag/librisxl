@@ -76,13 +76,17 @@ class SetSpecMatcher {
 
             Map specGroupsResult = [SolidMatches:0, MisMatchesOnA:0,MisMatchesOnB:0,bibInAukt:0,auktInBib:0,doubleDiff:0, possibleMatches:0]
 
+            def possibleBibfieldsFromSetSpec = auhtLinkableFieldNames.findAll{f->setSpecs.collect{it.field}.contains(f.authfield) }.collect{it.bibField}
+            def linkableBibfields = bibFieldGroups.collectMany {c->c.value.collect{it.keySet()[0]}}
+            def bibFieldsWithoutAuthField = linkableBibfields.findAll{it->!possibleBibfieldsFromSetSpec.contains(it)}
+
             specGroups.each { specGroup ->
                 def bibFieldGroup = bibFieldGroups.find {
                     it.key == specGroup.key
                 }
                 if (!bibFieldGroup?.value) {
                     def file = new File("/Users/Theodor/libris/missingbibfields.tsv")
-                    file << "${specGroup?.key} \t${setSpecs.first()?.bibid} \t${setSpecs.first()?.id} \t  http://libris.kb.se/bib/${setSpecs.first()?.bibid}?vw=full&tab3=marcBIBId: } \t http://libris.kb.se/auth/${setSpecs.first()?.id}\n"
+                    file << "${specGroup?.key}\t ${bibFieldsWithoutAuthField} \t${setSpecs.first()?.bibid} \t${setSpecs.first()?.id} \t  http://libris.kb.se/bib/${setSpecs.first()?.bibid}?vw=full&tab3=marc \t http://libris.kb.se/auth/${setSpecs.first()?.id}\n"
                 }
                 else {
                     //println "Specgroup: ${specGroup?.key}, AuthFields: ${specGroups.count { it.value }} against  ${bibFieldGroup?.key}, Bibfields: ${bibFieldGroup?.value.count { it }} "
@@ -110,8 +114,8 @@ class SetSpecMatcher {
                         def uncertainMatches = diffs.findAll { match ->
                             (match.diff.count { it } > 0 || match.reversediff.count { it } > 0) &&
                                     match.overlap.count{it} > 0 &&
-                            (match.reversediff.find { it -> it.a } == null && match.diff.find { it -> it.a } == null) &&
-                                    (match.reversediff.find { it -> it.b } == null && match.diff.find { it -> it.b } == null)
+                            (match.reversediff.find { it -> it.a } == null && match.diff.find { it -> it.a } == null)
+
 
                         }
 
@@ -198,6 +202,8 @@ class SetSpecMatcher {
                                     "\t${bibHas035a}" +
                                     "\t${match.bibset} " +
                                     "\t${match.auktset} " +
+                                    "\t${setSpecs.first()?.bibid} " +
+                                    "\t${setSpecs.first()?.id} " +
                                     "\n"
 
                         }
