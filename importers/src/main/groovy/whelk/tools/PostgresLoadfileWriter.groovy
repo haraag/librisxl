@@ -62,16 +62,10 @@ class PostgresLoadfileWriter {
         s_mainTableWriter = Files.newBufferedWriter(Paths.get(exportFileName), Charset.forName("UTF-8"));
         s_identifiersWriter = Files.newBufferedWriter(Paths.get(exportFileName + "_identifiers"), Charset.forName("UTF-8"));
         def counter = 0
-        def successfulMatches = 0
-        def totallMatches
         def startTime = System.currentTimeMillis()
         //withPool {
         try {
-            def sql = Sql.newInstance(connectionUrl, "com.mysql.jdbc.Driver")
-            sql.withStatement { Statement stmt -> stmt.fetchSize = Integer.MIN_VALUE }
-            sql.connection.autoCommit = false
-            sql.resultSetType = ResultSet.TYPE_FORWARD_ONLY
-            sql.resultSetConcurrency = ResultSet.CONCUR_READ_ONLY
+            Sql sql = prepareSql(connectionUrl)
 
             List<Map> previousAuthData = []
             Map previousBibResultSet = null
@@ -172,6 +166,15 @@ class PostgresLoadfileWriter {
 
     }
 
+    static Sql prepareSql(String connectionUrl) {
+        def sql = Sql.newInstance(connectionUrl, "com.mysql.jdbc.Driver")
+        sql.withStatement { Statement stmt -> stmt.fetchSize = Integer.MIN_VALUE }
+        sql.connection.autoCommit = false
+        sql.resultSetType = ResultSet.TYPE_FORWARD_ONLY
+        sql.resultSetConcurrency = ResultSet.CONCUR_READ_ONLY
+        sql
+    }
+
 
     static Map composeAuthData(LinkedHashMap<String, Object> map) {
         //TODO: how common is it with repeated subfields, ie "a"?
@@ -180,69 +183,9 @@ class PostgresLoadfileWriter {
             if (key.startsWith('1')) {
                 return [field: key, subfields: bibField[key].subfields]
             }
-
         }
-
         def builder = new JsonBuilder(map)
         throw new Exception("Unhandled authority record ${builder.toPrettyString()} q")
-
-        /*    for (Map bibField in map.data.fields) {
-            String key = bibField.keySet()[0]
-            switch (key) {
-                case { fieldKey -> ['100'].contains(fieldKey) }:
-                    //println "100"
-                    return [field : '100',
-                            author: map.data.fields."100".subfields.a?.first()?.find {
-                                it
-                            } ?: '',
-                            date  : map.data.fields."100".subfields.d?.first()?.find {
-                                it
-                            } ?: '',
-                            title : map.data.fields."100".subfields.t?.first()?.find {
-                                it
-                            } ?: '']
-                case { fieldKey -> ['110'].contains(fieldKey) }:
-                    //println "110"
-                    return [
-                            field: '110',
-                            a    : map.data.fields."110".subfields.a?.first()?.first() ?: '',
-                            b    : map.data.fields."110".subfields.a?.first()?.first() ?: ''
-
-                    ]
-                case { fieldKey -> ['130'].contains(fieldKey) }:
-                    //println "130"
-                    //TODO: Match on more fields?
-                    return [
-                            field: '130',
-                            a    : map.data.fields."130".subfields.a?.first()?.first() ?: '',
-
-
-                    ]
-                case { fieldKey -> ['150'].contains(fieldKey) }:
-                    //println "150"
-                    return [
-                            field: '150',
-                            term : map.data.fields."150".subfields.a?.first()?.first() ?: '']
-                case { fieldKey -> ['151'].contains(fieldKey) }:
-                    //println "151"
-                    //TODO: vilka delfält? https://www.loc.gov/marc/authority/ad151.html
-                    return [
-                            field: '151',
-                            term : map.data.fields."151".subfields.a?.first()?.first() ?: '']
-                case { fieldKey -> ['155'].contains(fieldKey) }:
-                    //println "155"
-                    //TODO: vilka delfält? https://www.loc.gov/marc/authority/ad151.html
-                    return [
-                            field: '155',
-                            term : map.data.fields."155".subfields.a?.first()?.first() ?: '']
-            //default:
-            //println "skipped field ${key}"
-
-
-            }
-        }
-        def builder = new JsonBuilder(map)
-        throw new Exception("Unhandled authority record ${builder.toPrettyString()}")*/
     }
 
     static Map getMarcDocMap(byte[] data) {

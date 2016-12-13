@@ -90,12 +90,12 @@ class SetSpecMatcher {
             def bibFieldsWithoutAuthField = linkableBibfields.findAll { it -> !possibleBibfieldsFromSetSpec.contains(it) }
 
             specGroups.each { specGroup ->
-                def statsFile = new File("/Users/Theodor/libris/uncertainmatches.tsv")
+                def statsFile = new File("/Users/theodortolstoy/libris/uncertainmatches.tsv")
                 def bibFieldGroup = bibFieldGroups.find {
                     it.key == specGroup.key
                 }
                 if (!bibFieldGroup?.value) {
-                   // def file = new File("/Users/Theodor/libris/missingbibfields.tsv")
+                   // def file = new File("/Users/theodortolstoy/libris/missingbibfields.tsv")
                    // file << "${specGroup?.key}\t ${bibFieldsWithoutAuthField} \t${setSpecs.first()?.bibid} \t${setSpecs.first()?.id} \t  http://libris.kb.se/bib/${setSpecs.first()?.bibid}?vw=full&tab3=marc \t http://libris.kb.se/auth/${setSpecs.first()?.id}\n"
                 } else {
                     //println "Specgroup: ${specGroup?.key}, AuthFields: ${specGroups.count { it.value }} against  ${bibFieldGroup?.key}, Bibfields: ${bibFieldGroup?.value.count { it }} "
@@ -110,7 +110,8 @@ class SetSpecMatcher {
                         def misMatchesOnA = diffs.findAll { match -> match.hasMisMatchOnA }
 
                         def uncertainMatches = diffs.findAll { match ->
-                            match.hasOnlyDiff || match.hasOnlyReverseDiff || match.hasDoubleDiff
+                            ((match.hasOnlyDiff || match.hasOnlyReverseDiff || match.hasDoubleDiff)
+                            && !match.hasMisMatchOnA && !match.isMatch)
                         }
 
                         specGroupsResult.possibleMatches += 1
@@ -198,9 +199,7 @@ class SetSpecMatcher {
                 boolean isMatch = (diff.count { it } == 0 &&
                         reverseDiff.count { it } == 0)
                 boolean hasMisMatchOnA = reverseDiff.find { it -> it.a } != null && diff.find { it -> it.a } != null
-                boolean hasOnlyDiff = diff.count {
-                    it
-                } > 0 && reverseDiff.count { it } == 0
+                boolean hasOnlyDiff = diff.count { it } > 0 && reverseDiff.count { it } == 0
                 boolean hasOnlyReverseDiff = diff.count {
                     it
                 } == 0 && reverseDiff.count { it } > 0
@@ -237,7 +236,7 @@ class SetSpecMatcher {
                 //TODO: print stuff to file instead
 
                 /*if((returnMap.bibfield as String).startsWith("6")){
-                    def file = new File("/Users/Theodor/libris/subjectOccurrences.tsv")
+                    def file = new File("/Users/theodortolstoy/libris/subjectOccurrences.tsv")
                     file << "\t${setSpec.field}\t${returnMap.bibfield}\t${field[field.keySet().first()]?.'ind2'}\t${bibSubFields.find{it->it.'2' != null}?.'2'}\n"
                 }*/
 
